@@ -1,0 +1,117 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile data including preferences and identity.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "isPremium": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "SystemSettings": {
+      "title": "System Settings",
+      "description": "Global settings for the application.",
+      "type": "object",
+      "properties": {
+        "premiumCode": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Report": {
+      "title": "Support Report",
+      "description": "A generated support or abuse report.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "country": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "targetEmail": { "type": "string" },
+        "reportType": { "type": "string" },
+        "description": { "type": "string" },
+        "aiSuggestion": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "sent", "failed", "draft"] },
+        "generatedContent": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "reportType", "status"]
+    },
+    "Template": {
+      "title": "Report Template",
+      "description": "Pre-defined templates for various report types.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "content": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "content"]
+    },
+    "Upload": {
+      "title": "Upload Record",
+      "description": "Information about uploaded files for bulk reporting.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "fileName": { "type": "string" },
+        "fileType": { "type": "string" },
+        "status": { "type": "string", "enum": ["processing", "completed", "failed"] },
+        "recordCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "fileName", "status"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "System or targeted notifications for users.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "targetId": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "type": { "type": "string" }
+      },
+      "required": ["title", "message", "targetId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Private user profiles."
+    },
+    "/reports/{reportId}": {
+      "schema": "Report",
+      "description": "User generated reports. Accessible only by owner."
+    },
+    "/templates/{templateId}": {
+      "schema": "Template",
+      "description": "Shared templates for all users to read."
+    },
+    "/uploads/{uploadId}": {
+      "schema": "Upload",
+      "description": "Upload tracking for users."
+    },
+    "/notifications/{notifId}": {
+      "schema": "Notification",
+      "description": "System notifications."
+    },
+    "/settings/premium": {
+      "schema": "SystemSettings",
+      "description": "Global premium settings."
+    }
+  }
+}

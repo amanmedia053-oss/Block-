@@ -1,0 +1,106 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Global Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Helpers ---
+    
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email']) 
+        && data.uid is string && data.uid.size() <= 128
+        && data.email is string && data.email.size() <= 200
+        && (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100))
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 500));
+    }
+
+    function isValidReport(data) {
+      return data.keys().hasAll(['userId', 'reportType', 'status'])
+        && data.userId == request.auth.uid
+        && data.reportType is string && data.reportType.size() <= 50
+        && data.status in ['pending', 'sent', 'failed', 'draft']
+        && (!('country' in data) || (data.country is string && data.country.size() <= 100))
+        && (!('phoneNumber' in data) || (data.phoneNumber is string && data.phoneNumber.size() <= 20))
+        && (!('targetEmail' in data) || (data.targetEmail is string && data.targetEmail.size() <= 200))
+        && (!('description' in data) || (data.description is string && data.description.size() <= 2000))
+        && (!('aiSuggestion' in data) || (data.aiSuggestion is string && data.aiSuggestion.size() <= 2000))
+        && (!('generatedContent' in data) || (data.generatedContent is string && data.generatedContent.size() <= 5000));
+    }
+
+    function isValidTemplate(data) {
+      return data.keys().hasAll(['name', 'content'])
+        && data.name is string && data.name.size() <= 100
+        && data.content is string && data.content.size() <= 5000
+        && (!('category' in data) || (data.category is string && data.category.size() <= 50))
+        && (!('description' in data) || (data.description is string && data.description.size() <= 500));
+    }
+
+    function isValidUpload(data) {
+      return data.keys().hasAll(['userId', 'fileName', 'status'])
+        && data.userId == request.auth.uid
+        && data.fileName is string && data.fileName.size() <= 255
+        && data.status in ['processing', 'completed', 'failed'];
+    }
+
+    // --- Collection Routes ---
+
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().uid == userId;
+      allow update: if isOwner(userId) && isValidUser(incoming()) 
+        && incoming().uid == existing().uid
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'email', 'updatedAt']);
+    }
+
+    match /reports/{reportId} {
+      allow get: if isSignedIn() && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidReport(incoming()) && isValidId(reportId);
+      allow update: if isSignedIn() && existing().userId == request.auth.uid && isValidReport(incoming())
+        && incoming().userId == existing().userId
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'country', 'phoneNumber', 'targetEmail', 'description', 
+          'aiSuggestion', 'status', 'generatedContent', 'updatedAt'
+        ]);
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
+
+    match /templates/{templateId} {
+      allow read: if isSignedIn();
+      // Only system/admin (simulated for now by denying client writes)
+      allow write: if false; 
+    }
+
+    match /uploads/{uploadId} {
+      allow get: if isSignedIn() && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidUpload(incoming()) && isValidId(uploadId);
+      allow update: if isSignedIn() && existing().userId == request.auth.uid && isValidUpload(incoming())
+        && incoming().userId == existing().userId
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'recordCount', 'updatedAt']);
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "SupportHub",
+  "description": "A premium, modern report management application with AI-powered features, glassmorphism design, and real-time synchronization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "AI Report Generation",
+    "Cloud Synchronization",
+    "Multiple Template Support",
+    "Data Export (PDF/JSON/CSV)"
+  ]
+}

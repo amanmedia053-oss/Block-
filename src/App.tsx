@@ -7,14 +7,11 @@ import { useState, useEffect } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { App as CapacitorApp } from '@capacitor/app';
 import { StatusBar, Style } from '@capacitor/status-bar';
-import { useAuth } from './lib/firebase';
+import { generateDeviceId, isValidActivationCode } from './lib/activation';
 import { Screen, Language } from './types';
-import { db } from './lib/firebase';
-import { doc, onSnapshot, setDoc, getDoc, serverTimestamp, collection, query, where, orderBy, limit } from 'firebase/firestore';
 
 // Screens
 import SplashScreen from './components/screens/SplashScreen';
-import LoginScreen from './components/screens/LoginScreen';
 import Dashboard from './components/screens/Dashboard';
 import CreateReportScreen from './components/screens/CreateReportScreen';
 import ReportPreviewScreen from './components/screens/ReportPreviewScreen';
@@ -25,11 +22,9 @@ import SettingsScreen from './components/screens/SettingsScreen';
 import NumberValidationScreen from './components/screens/NumberValidationScreen';
 import PolicyScreen from './components/screens/PolicyScreen';
 import HelpScreen from './components/screens/HelpScreen';
-import AdminNotificationsScreen from './components/screens/AdminNotificationsScreen';
 
 // Components
 import Navigation from './components/Navigation';
-import NotificationWatcher from './components/NotificationWatcher';
 
 import { ToastProvider } from './components/ui/Toast';
 
@@ -76,7 +71,7 @@ export default function App() {
       try {
         await CapacitorApp.removeAllListeners();
         await CapacitorApp.addListener('backButton', () => {
-          if (currentScreen === 'dashboard' || currentScreen === 'login' || currentScreen === 'splash') {
+          if (currentScreen === 'dashboard' || currentScreen === 'splash') {
             CapacitorApp.exitApp();
           } else {
             // Logic to go back based on screen
@@ -84,7 +79,7 @@ export default function App() {
               setCurrentScreen('dashboard');
             } else if (currentScreen === 'preview') {
               setCurrentScreen('create');
-            } else if (['policy', 'help', 'admin-notifications', 'checkNumber'].includes(currentScreen)) {
+            } else if (['policy', 'help', 'checkNumber'].includes(currentScreen)) {
               if (currentScreen === 'checkNumber') {
                 setCurrentScreen('dashboard');
               } else {
@@ -126,91 +121,62 @@ export default function App() {
     }
   }, [isDarkMode]);
 
+  // Offline User Initialization
   useEffect(() => {
-    const unsubAuth = useAuth(async (u) => {
-      setUser(u);
-      if (!isInitializing) {
-        if (!u && currentScreen !== 'splash') {
-          setCurrentScreen('login');
-        } else if (u && (currentScreen === 'login' || currentScreen === 'splash')) {
-          setCurrentScreen('dashboard');
-        }
+    const initUser = () => {
+      const storedUser = localStorage.getItem('reporter_app_user');
+      const deviceId = generateDeviceId();
+      
+      if (storedUser) {
+        const u = JSON.parse(storedUser);
+        setUser({ ...u, deviceId });
+        setIsPremium(localStorage.getItem(`premium_${deviceId}`) === 'true');
+        // Admin check (Local secret or name for testing)
+        setIsAdmin(localStorage.getItem('admin_mode') === 'true');
+      } else {
+        const newUser = {
+          name: 'User',
+          id: deviceId,
+          deviceId: deviceId,
+          createdAt: new Date().toISOString()
+        };
+        localStorage.setItem('reporter_app_user', JSON.stringify(newUser));
+        setUser(newUser);
       }
-    });
-    return unsubAuth;
-  }, [isInitializing, currentScreen]);
+      setIsInitializing(false);
+    };
+    initUser();
+  }, []);
 
+  // Sync count and stats from localStorage
   useEffect(() => {
-    if (!user) {
-      setIsPremium(false);
-      setIsAdmin(false);
-      setReportCount(0);
-      setFavorites([]);
-      return;
-    }
-
-    setIsAdmin(user.email === 'majidbhatti6312@gmail.com' && user.emailVerified);
+    if (!user) return;
     
-    const userDocRef = doc(db, 'users', user.uid);
-    
-    // Sync user doc
-    const syncUser = async () => {
-      try {
-        const snap = await getDoc(userDocRef);
-        if (!snap.exists()) {
-          await setDoc(userDocRef, {
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName || null,
-            photoURL: user.photoURL || null,
-            isPremium: false,
-            favoriteTemplates: [],
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-          });
-        }
-      } catch (err) {
-        console.error("User sync error:", err);
+    const updateStats = () => {
+      const reports = JSON.parse(localStorage.getItem('local_reports') || '[]');
+      setReportCount(reports.length);
+      
+      const storedUser = localStorage.getItem('reporter_app_user');
+      if (storedUser) {
+        const u = JSON.parse(storedUser);
+        setFavorites(u.favoriteTemplates || []);
       }
     };
-    syncUser();
 
-    // Listen for premium status and favorites
-    const unsubUser = onSnapshot(userDocRef, (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setIsPremium(data.isPremium || false);
-        setFavorites(data.favoriteTemplates || []);
-      }
-    }, (err) => console.error("User listener error:", err));
-
-    // Listen for report count
-    const q = query(collection(db, 'reports'), where('userId', '==', user.uid));
-    const unsubCount = onSnapshot(q, (snap) => {
-      setReportCount(snap.size);
-    }, (err) => console.error("Report count error:", err));
-
-    return () => {
-      unsubUser();
-      unsubCount();
-    };
-  }, [user]);
+    updateStats();
+    // Re-check stats every time we return to dashboard or app starts
+    window.addEventListener('storage', updateStats);
+    return () => window.removeEventListener('storage', updateStats);
+  }, [user, currentScreen]);
 
   const handleSplashComplete = () => {
-    setIsInitializing(false);
-    if (user) {
-      setCurrentScreen('dashboard');
-    } else {
-      setCurrentScreen('login');
-    }
+    setCurrentScreen('dashboard');
   };
 
   const renderScreen = () => {
     switch (currentScreen) {
       case 'splash':
         return <SplashScreen key="splash" onComplete={handleSplashComplete} />;
-      case 'login':
-        return <LoginScreen key="login" onLogin={(u) => { setUser(u); setCurrentScreen('dashboard'); }} />;
       case 'dashboard':
         return <Dashboard key="dashboard" user={user} lang={lang} isPremium={isPremium} isAdmin={isAdmin} reportCount={reportCount} setScreen={navigateTo} />;
       case 'create':
@@ -237,7 +203,7 @@ export default function App() {
             primaryColor={primaryColor}
             setPrimaryColor={setPrimaryColor}
             onBack={() => setCurrentScreen('dashboard')} 
-            onLogout={() => { setUser(null); setCurrentScreen('login'); }} 
+            onLogout={() => { setUser(null); setCurrentScreen('splash'); }} 
             onNavigate={navigateTo}
           />
         );
@@ -247,8 +213,6 @@ export default function App() {
         return <PolicyScreen key="policy" lang={lang} onBack={() => setCurrentScreen(navSource)} />;
       case 'help':
         return <HelpScreen key="help" lang={lang} onBack={() => setCurrentScreen(navSource)} />;
-      case 'admin-notifications':
-        return <AdminNotificationsScreen key="admin-notifications" lang={lang} onBack={() => setCurrentScreen('settings')} />;
       default:
         return <Dashboard user={user} lang={lang} isPremium={isPremium} isAdmin={isAdmin} reportCount={reportCount} setScreen={navigateTo} />;
     }
@@ -284,7 +248,6 @@ export default function App() {
   return (
     <ToastProvider>
       <div className="container-mobile" style={themeStyle}>
-        <NotificationWatcher user={user} lang={lang} />
         <AnimatePresence mode="wait">
           {renderScreen()}
         </AnimatePresence>

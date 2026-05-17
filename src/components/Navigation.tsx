@@ -22,7 +22,7 @@ export default function Navigation({
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 px-6 pb-8 pt-4" dir={lang === 'ps' ? 'rtl' : 'ltr'}>
+    <nav className="absolute bottom-0 left-0 right-0 z-40 px-6 pb-8 pt-4" dir={lang === 'ps' ? 'rtl' : 'ltr'}>
       <div className="max-w-md mx-auto glass-card flex items-center justify-around p-3 backdrop-blur-2xl bg-white/[0.05] border-white/[0.05] shadow-[0_-20px_50px_rgba(0,0,0,0.5)]">
         {tabs.map((tab) => {
           const isActive = activeScreen === tab.id;

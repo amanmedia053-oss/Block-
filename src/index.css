@@ -1,0 +1,151 @@
+@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100..900&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Vazirmatn", "IBM Plex Sans Arabic", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Vazirmatn", "IBM Plex Sans Arabic", "Inter", ui-sans-serif, system-ui, sans-serif;
+  
+  --color-brand-primary: var(--primary-color, #10b981);
+  --color-brand-primary-glow: rgba(var(--primary-color-rgb, 16, 185, 129), 0.5);
+  --color-brand-primary-bg: rgba(var(--primary-color-rgb, 16, 185, 129), 0.1);
+  --color-brand-primary-border: rgba(var(--primary-color-rgb, 16, 185, 129), 0.2);
+
+  --background-glass: var(--glass-bg, rgba(15, 15, 15, 0.7));
+  --border-glass: var(--glass-border, rgba(255, 255, 255, 0.1));
+
+  --emerald-500-base: var(--primary-color-rgb, 16, 185, 129);
+  --white-base: 255, 255, 255;
+
+  /* Use dynamic color for emerald overrides to trick Tailwind classes */
+  --color-emerald-500: var(--primary-color, #10b981);
+  --color-emerald-400: var(--primary-color, #10b981);
+  --color-emerald-600: var(--primary-color-dark, #059669);
+  --color-emerald-700: #047857;
+  --color-emerald-800: #065f46;
+  --color-emerald-900: #064e3b;
+  --color-emerald-950: #022c22;
+
+  /* Override default gray to use hex */
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f3f4f6;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #111827;
+  --color-gray-950: #030712;
+
+  /* Override default red to use hex */
+  --color-red-500: #ef4444;
+  --color-red-600: #dc2626;
+}
+
+@layer base {
+  body {
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+  
+  body.dark {
+    @apply bg-[#050505] text-white font-sans antialiased;
+    background-image: 
+      radial-gradient(circle at 10% 20%, var(--primary-color-glow, rgba(16, 185, 129, 0.05)) 0%, transparent 40%),
+      radial-gradient(circle at 90% 80%, var(--primary-color-glow-strong, rgba(16, 185, 129, 0.1)) 0%, transparent 40%);
+    min-height: 100vh;
+    --glass-bg: rgba(15, 15, 15, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --text-primary: #ffffff;
+    --text-secondary: #9ca3af;
+  }
+
+  body.light {
+    @apply bg-gray-50 text-gray-900 font-sans antialiased;
+    background-image: 
+      radial-gradient(circle at 10% 20%, var(--primary-color-glow-light, rgba(16, 185, 129, 0.1)) 0%, transparent 40%),
+      radial-gradient(circle at 90% 80%, rgba(0, 0, 0, 0.02) 0%, transparent 40%);
+    min-height: 100vh;
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    --glass-border: rgba(0, 0, 0, 0.08);
+    --text-primary: #111827;
+    --text-secondary: #4b5563;
+  }
+}
+
+@layer components {
+  .glass-card {
+    background-color: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: 1.5rem;
+  }
+  
+  .glass-input {
+    background-color: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 1rem;
+    padding: 0.75rem 1rem;
+    @apply focus:outline-hidden focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 transition-all placeholder:text-gray-500;
+    color: var(--text-primary);
+  }
+  
+  .btn-primary {
+    background-color: var(--primary-color, #10b981);
+    @apply hover:opacity-90 text-white font-semibold py-3 px-6 rounded-2xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2;
+    box-shadow: 0 10px 15px -3px var(--primary-color-glow-strong, rgba(16, 185, 129, 0.2));
+  }
+
+  .text-brand {
+    color: var(--primary-color);
+  }
+
+  .bg-brand {
+    background-color: var(--primary-color);
+  }
+
+  .bg-brand-soft {
+    background-color: var(--color-brand-primary-bg);
+  }
+
+  .border-brand {
+    border-color: var(--primary-color);
+  }
+
+  .border-brand-soft {
+    border-color: var(--color-brand-primary-border);
+  }
+  
+  .btn-glass {
+    background-color: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    @apply hover:opacity-80 font-medium py-3 px-6 rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-2;
+    color: var(--text-primary);
+  }
+  
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(to right, var(--primary-color, #10b981), var(--primary-color-dark, #059669));
+  }
+  
+  .glow-green {
+    box-shadow: 0 0 20px var(--primary-color-glow, rgba(16, 185, 129, 0.2));
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-emerald-500/20 rounded-full hover:bg-emerald-500/40;
+}
+
+/* Responsive container */
+.container-mobile {
+  @apply w-full max-w-md mx-auto min-h-screen relative overflow-hidden flex flex-col;
+}

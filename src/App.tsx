@@ -5,6 +5,8 @@
 
 import { useState, useEffect } from 'react';
 import { AnimatePresence } from 'motion/react';
+import { App as CapacitorApp } from '@capacitor/app';
+import { StatusBar, Style } from '@capacitor/status-bar';
 import { useAuth } from './lib/firebase';
 import { Screen, Language } from './types';
 import { db } from './lib/firebase';
@@ -66,6 +68,52 @@ export default function App() {
   // Theme state
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [primaryColor, setPrimaryColor] = useState('#10b981');
+
+  // Capacitor Integration
+  useEffect(() => {
+    const initCapacitor = async () => {
+      // Hardware Back Button
+      try {
+        await CapacitorApp.removeAllListeners();
+        await CapacitorApp.addListener('backButton', () => {
+          if (currentScreen === 'dashboard' || currentScreen === 'login' || currentScreen === 'splash') {
+            CapacitorApp.exitApp();
+          } else {
+            // Logic to go back based on screen
+            if (['create', 'templates', 'history', 'settings', 'upload'].includes(currentScreen)) {
+              setCurrentScreen('dashboard');
+            } else if (currentScreen === 'preview') {
+              setCurrentScreen('create');
+            } else if (['policy', 'help', 'admin-notifications', 'checkNumber'].includes(currentScreen)) {
+              if (currentScreen === 'checkNumber') {
+                setCurrentScreen('dashboard');
+              } else {
+                setCurrentScreen(navSource || 'settings');
+              }
+            } else {
+              setCurrentScreen('dashboard');
+            }
+          }
+        });
+      } catch (e) {
+        console.log("Capacitor App not running");
+      }
+
+      // Status Bar Styling
+      try {
+        await StatusBar.setStyle({ 
+          style: isDarkMode ? Style.Dark : Style.Light 
+        });
+        await StatusBar.setBackgroundColor({ 
+          color: primaryColor 
+        });
+      } catch (e) {
+        console.log("Capacitor StatusBar not running");
+      }
+    };
+
+    initCapacitor();
+  }, [currentScreen, isDarkMode, navSource]);
 
   useEffect(() => {
     // Apply theme to body

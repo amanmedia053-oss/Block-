@@ -7,11 +7,6 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Language, translations } from '../../lib/locales';
-import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
-import { 
-  collection, query, where, orderBy, onSnapshot, 
-  deleteDoc, doc, Timestamp 
-} from 'firebase/firestore';
 import ConfirmModal from '../ui/ConfirmModal';
 
 interface HistoryScreenProps {
@@ -29,41 +24,39 @@ export default function HistoryScreen({ user, lang, onBack, onSelectReport }: Hi
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user?.uid) return;
+    const loadReports = () => {
+      setIsLoading(true);
+      try {
+        const localData = localStorage.getItem('local_reports');
+        if (localData) {
+          const parsed = JSON.parse(localData);
+          setReports(parsed);
+        }
+      } catch (err) {
+        console.error("Failed to load reports", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-    const q = query(
-      collection(db, 'reports'),
-      where('userId', '==', user.uid),
-      orderBy('createdAt', 'desc')
-    );
+    loadReports();
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setReports(docs);
-      setIsLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'reports');
-    });
+    // Listen for storage changes if other screens update it
+    window.addEventListener('storage', loadReports);
+    return () => window.removeEventListener('storage', loadReports);
+  }, []);
 
-    return unsubscribe;
-  }, [user?.uid]);
-
-  const deleteReport = async (id: string, e: React.MouseEvent) => {
+  const deleteReport = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setDeleteId(id);
   };
 
-  const confirmDelete = async () => {
+  const confirmDelete = () => {
     if (!deleteId) return;
-    try {
-      await deleteDoc(doc(db, 'reports', deleteId));
-      setDeleteId(null);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `reports/${deleteId}`);
-    }
+    const updatedReports = reports.filter(r => r.id !== deleteId);
+    localStorage.setItem('local_reports', JSON.stringify(updatedReports));
+    setReports(updatedReports);
+    setDeleteId(null);
   };
 
   const filteredReports = activeTab === 'all' 
@@ -88,9 +81,9 @@ export default function HistoryScreen({ user, lang, onBack, onSelectReport }: Hi
     }
   };
 
-  const formatDate = (timestamp: any) => {
-    if (!timestamp) return '';
-    const date = timestamp instanceof Timestamp ? timestamp.toDate() : new Date(timestamp);
+  const formatDate = (dateString: any) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
     return date.toLocaleDateString(lang === 'ps' ? 'ps-AF' : 'en-US', {
       month: 'short',
       day: 'numeric',
@@ -98,9 +91,9 @@ export default function HistoryScreen({ user, lang, onBack, onSelectReport }: Hi
     });
   };
 
-  const formatTime = (timestamp: any) => {
-    if (!timestamp) return '';
-    const date = timestamp instanceof Timestamp ? timestamp.toDate() : new Date(timestamp);
+  const formatTime = (dateString: any) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
     return date.toLocaleTimeString(lang === 'ps' ? 'ps-AF' : 'en-US', {
       hour: '2-digit',
       minute: '2-digit'
@@ -111,7 +104,7 @@ export default function HistoryScreen({ user, lang, onBack, onSelectReport }: Hi
     <motion.div 
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
-      className={`flex-1 overflow-y-auto px-6 pt-16 pb-32 ${lang === 'ps' ? 'text-right' : 'text-left'}`}
+      className={`flex-1 min-h-0 overflow-y-auto px-6 pt-16 pb-32 ${lang === 'ps' ? 'text-right' : 'text-left'}`}
       dir={lang === 'ps' ? 'rtl' : 'ltr'}
     >
       <header className={`flex items-center justify-between mb-8 ${lang === 'ps' ? 'flex-row-reverse' : ''}`}>

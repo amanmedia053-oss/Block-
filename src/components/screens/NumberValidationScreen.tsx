@@ -7,8 +7,6 @@ import {
 } from 'lucide-react';
 import { Language, translations } from '../../lib/locales';
 import { generateReportContent } from '../../lib/gemini';
-import { collection, addDoc, serverTimestamp, updateDoc, doc, deleteDoc } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { useToast } from '../ui/Toast';
 
 export default function NumberValidationScreen({ 
@@ -40,26 +38,6 @@ export default function NumberValidationScreen({
   const [reportStatus, setReportStatus] = useState<'pending' | 'sent' | 'failed' | 'draft'>('draft');
   const [showExitDialog, setShowExitDialog] = useState(false);
 
-  useEffect(() => {
-    if (initialReport) {
-      setReporterName(initialReport.reporterName || '');
-      setReportType(initialReport.reportType || 'Spam');
-      setGeneratedContent(initialReport.generatedContent || '');
-      setCurrentReportId(initialReport.id || null);
-      setReportStatus(initialReport.status || 'draft');
-      
-      // Parse phone number to separate country code and number
-      const phone = initialReport.phoneNumber || '';
-      const matchedCountry = countries.find(c => phone.startsWith(c.code));
-      if (matchedCountry) {
-        setCountryCode(matchedCountry.code);
-        setNumber(phone.replace(matchedCountry.code, ''));
-      } else {
-        setNumber(phone);
-      }
-    }
-  }, [initialReport]);
-
   const countries = [
     { code: '+93', name: 'Afghanistan', flag: '🇦🇫' },
     { code: '+92', name: 'Pakistan', flag: '🇵🇰' },
@@ -81,6 +59,25 @@ export default function NumberValidationScreen({
     { code: '+61', name: 'Australia', flag: '🇦🇺' },
     { code: '+86', name: 'China', flag: '🇨🇳' },
   ];
+
+  useEffect(() => {
+    if (initialReport) {
+      setReporterName(initialReport.reporterName || '');
+      setReportType(initialReport.reportType || 'Spam');
+      setGeneratedContent(initialReport.generatedContent || '');
+      setCurrentReportId(initialReport.id || null);
+      setReportStatus(initialReport.status || 'draft');
+      
+      const phone = initialReport.phoneNumber || '';
+      const matchedCountry = countries.find(c => phone.startsWith(c.code));
+      if (matchedCountry) {
+        setCountryCode(matchedCountry.code);
+        setNumber(phone.replace(matchedCountry.code, ''));
+      } else {
+        setNumber(phone);
+      }
+    }
+  }, [initialReport]);
 
   const reportTypes = [
     { id: 'Custom', label: lang === 'ps' ? 'کسټم ډول' : 'Custom Type', color: 'text-purple-400' },
@@ -148,25 +145,23 @@ export default function NumberValidationScreen({
       setGeneratedContent(content);
       setReportStatus('draft');
 
-      // Save as draft in Firestore
-      if (auth.currentUser) {
-        try {
-          const docRef = await addDoc(collection(db, 'reports'), {
-            userId: auth.currentUser.uid,
-            reporterName,
-            country: countries.find(c => c.code === countryCode)?.name || '',
-            phoneNumber: fullNumber,
-            reportType: typeLabel,
-            status: 'draft',
-            generatedContent: content,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-          setCurrentReportId(docRef.id);
-        } catch (err) {
-          console.error("Failed to save draft:", err);
-        }
-      }
+      // Save to local storage
+      const reportId = Math.random().toString(36).substring(2, 11);
+      const reportData = {
+        id: reportId,
+        reporterName,
+        country: countries.find(c => c.code === countryCode)?.name || '',
+        phoneNumber: fullNumber,
+        reportType: typeLabel,
+        status: 'draft',
+        generatedContent: content,
+        createdAt: new Date().toISOString()
+      };
+      
+      const existingReports = JSON.parse(localStorage.getItem('local_reports') || '[]');
+      localStorage.setItem('local_reports', JSON.stringify([reportData, ...existingReports]));
+      setCurrentReportId(reportId);
+      
     } catch (e) {
       setError(lang === 'ps' ? "د رپوټ جوړولو کې ستونزه راغله." : "Failed to generate report.");
     } finally {
@@ -174,21 +169,18 @@ export default function NumberValidationScreen({
     }
   };
 
-  const updateReportStatus = async (status: 'sent' | 'failed') => {
-    if (currentReportId && auth.currentUser) {
-      try {
-        await updateDoc(doc(db, 'reports', currentReportId), {
-          status: status,
-          updatedAt: serverTimestamp()
-        });
-        setReportStatus(status);
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, `reports/${currentReportId}`);
-      }
+  const updateReportStatus = (status: 'sent' | 'failed') => {
+    if (currentReportId) {
+      const existingReports = JSON.parse(localStorage.getItem('local_reports') || '[]');
+      const updatedReports = existingReports.map((r: any) => 
+        r.id === currentReportId ? { ...r, status } : r
+      );
+      localStorage.setItem('local_reports', JSON.stringify(updatedReports));
+      setReportStatus(status);
     }
   };
 
-  const handleBack = async () => {
+  const handleBack = () => {
     if (generatedContent && reportStatus === 'draft') {
       setShowExitDialog(true);
       return;
@@ -199,13 +191,11 @@ export default function NumberValidationScreen({
     onBack();
   };
 
-  const discardAndExit = async () => {
-    if (currentReportId && auth.currentUser) {
-      try {
-        await deleteDoc(doc(db, 'reports', currentReportId));
-      } catch (err) {
-        console.error("Failed to delete report:", err);
-      }
+  const discardAndExit = () => {
+    if (currentReportId) {
+      const existingReports = JSON.parse(localStorage.getItem('local_reports') || '[]');
+      const updatedReports = existingReports.filter((r: any) => r.id !== currentReportId);
+      localStorage.setItem('local_reports', JSON.stringify(updatedReports));
     }
     setCurrentReportId(null);
     setGeneratedContent('');
@@ -235,7 +225,7 @@ export default function NumberValidationScreen({
     <motion.div 
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
-      className={`flex-1 overflow-y-auto px-6 pt-16 pb-32 ${lang === 'ps' ? 'text-right' : 'text-left'}`}
+      className={`flex-1 min-h-0 overflow-y-auto px-6 pt-16 pb-32 ${lang === 'ps' ? 'text-right' : 'text-left'}`}
       dir={lang === 'ps' ? 'rtl' : 'ltr'}
     >
       <header className={`flex items-center gap-4 mb-10 ${lang === 'ps' ? 'flex-row-reverse' : ''}`}>

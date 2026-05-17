@@ -8,8 +8,6 @@ import {
 import { useState, useEffect } from 'react';
 import { Language, translations } from '../../lib/locales';
 import { Screen } from '../../types';
-import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
-import { collection, query, where, orderBy, limit, onSnapshot } from 'firebase/firestore';
 
 export default function Dashboard({ 
   user, 
@@ -27,30 +25,19 @@ export default function Dashboard({
   setScreen: (s: any) => void 
 }) {
   const t = translations[lang];
-  const [recentReports, setRecentReports] = useState<any[]>([]);
-  const isTrialOver = !isPremium && reportCount >= 3;
+  const [recentReportsCount, setRecentReportsCount] = useState(0);
+  const isTrialOver = !isPremium && reportCount >= 2;
 
   useEffect(() => {
-    if (!user?.uid) return;
-
-    const q = query(
-      collection(db, 'reports'),
-      where('userId', '==', user.uid),
-      orderBy('createdAt', 'desc'),
-      limit(3)
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setRecentReports(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'reports');
-    });
-
-    return unsubscribe;
-  }, [user?.uid]);
+    const localData = localStorage.getItem('local_reports');
+    if (localData) {
+      const parsed = JSON.parse(localData);
+      setRecentReportsCount(parsed.length);
+    }
+  }, [reportCount]);
 
   const stats = [
-    { label: t.reports, value: recentReports.length.toString(), icon: FileText, color: 'text-brand', bg: 'bg-brand-soft' },
+    { label: t.reports, value: recentReportsCount.toString(), icon: FileText, color: 'text-brand', bg: 'bg-brand-soft' },
   ];
 
   const quickActions = [
@@ -64,10 +51,7 @@ export default function Dashboard({
 
   const handleAction = (id: string, isLocked: boolean) => {
     if (isLocked) {
-      if (id === 'upload') {
-        // Only admin can upload
-        return;
-      }
+      if (id === 'upload') return;
       setScreen('settings');
     } else {
       setScreen(id as Screen);
@@ -78,21 +62,21 @@ export default function Dashboard({
     <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className={`flex-1 overflow-y-auto px-6 pt-16 pb-32 ${lang === 'ps' ? 'text-right' : 'text-left'}`}
+      className={`flex-1 min-h-0 overflow-y-auto px-6 pt-16 pb-32 ${lang === 'ps' ? 'text-right' : 'text-left'}`}
       dir={lang === 'ps' ? 'rtl' : 'ltr'}
     >
       <header className={`flex items-center justify-between mb-10 ${lang === 'ps' ? 'flex-row-reverse' : ''}`}>
         <div className={`flex items-center gap-4 ${lang === 'ps' ? 'flex-row-reverse' : ''}`}>
           <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 p-1">
             <img 
-              src={user?.photoURL || `https://ui-avatars.com/api/?name=${user?.displayName || 'User'}&background=10b981&color=fff`} 
+              src={user?.photoURL || `https://ui-avatars.com/api/?name=${user?.name || 'User'}&background=10b981&color=fff`} 
               alt="Avatar" 
               className="w-full h-full rounded-[14px] object-cover"
             />
           </div>
           <div>
             <p className="text-gray-400 text-sm">{t.welcome}</p>
-            <h3 className="text-xl font-bold font-display">{user?.displayName || 'User'}</h3>
+            <h3 className="text-xl font-bold font-display">{user?.name || 'User'}</h3>
           </div>
         </div>
         <button className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center relative active:scale-90 transition-transform">

@@ -6,8 +6,6 @@ import {
   Save, Eye, AlertCircle, Lock, X, Check
 } from 'lucide-react';
 import { getAISuggestions, generateReportContent } from '../../lib/gemini';
-import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useToast } from '../ui/Toast';
 
 import { Language, translations } from '../../lib/locales';
@@ -30,7 +28,7 @@ export default function CreateReportScreen({
   onPreview: (report: any) => void 
 }) {
   const t = translations[lang];
-  const isTrialOver = !isPremium;
+  const isTrialOver = !isPremium && reportCount >= 2; // Allow 2 free reports for example
   const [formData, setFormData] = useState({
     country: 'Afghanistan',
     phoneNumber: '',
@@ -79,8 +77,12 @@ export default function CreateReportScreen({
   useEffect(() => {
     if (formData.description.length > 20) {
       const timer = setTimeout(async () => {
-        const result = await getAISuggestions(formData.description);
-        setSuggestions(result);
+        try {
+          const result = await getAISuggestions(formData.description);
+          setSuggestions(result);
+        } catch (e) {
+          console.log("AI suggestions unavailable");
+        }
       }, 1000);
       return () => clearTimeout(timer);
     } else {
@@ -102,23 +104,22 @@ export default function CreateReportScreen({
       });
 
       const reportData = {
+        id: Math.random().toString(36).substring(2, 11),
         ...formData,
         reportType: formData.reportType === 'Custom' ? customType : formData.reportType,
-        userId: user.uid,
+        userId: user.id || user.uid,
         status: 'draft',
         generatedContent: content,
         aiSuggestion: suggestions.join(', '),
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        createdAt: new Date().toISOString(),
       };
 
-      try {
-        const docRef = await addDoc(collection(db, 'reports'), reportData);
-        showToast(lang === 'ps' ? 'په ډرافټ کې ثبت شو' : 'Saved to draft');
-        onPreview({ ...reportData, id: docRef.id });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.WRITE, 'reports');
-      }
+      // Save to local storage
+      const existingReports = JSON.parse(localStorage.getItem('local_reports') || '[]');
+      localStorage.setItem('local_reports', JSON.stringify([reportData, ...existingReports]));
+      
+      showToast(lang === 'ps' ? 'په محلي ډول خوندي شو' : 'Saved locally');
+      onPreview(reportData);
     } catch (e) {
       setError('Failed to generate report. Please try again.');
     } finally {
@@ -130,7 +131,7 @@ export default function CreateReportScreen({
     <motion.div 
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
-      className={`flex-1 overflow-y-auto px-6 pt-16 pb-32 ${lang === 'ps' ? 'text-right' : 'text-left'}`}
+      className={`flex-1 min-h-0 overflow-y-auto px-6 pt-16 pb-32 ${lang === 'ps' ? 'text-right' : 'text-left'}`}
       dir={lang === 'ps' ? 'rtl' : 'ltr'}
     >
       <header className={`flex items-center gap-4 mb-8 ${lang === 'ps' ? 'flex-row-reverse' : ''}`}>

@@ -5,14 +5,12 @@ import {
   Shield, Download, LogOut, ChevronRight,
   User, CreditCard, HelpCircle, Mail,
   Sparkles, Key, Check, Copy, AlertCircle, RefreshCw,
-  Facebook, MessageCircle, Send, Info, Camera, X, Upload
+  Facebook, MessageCircle, Send, Info, Camera, X, Terminal
 } from 'lucide-react';
-import { logout, db } from '../../lib/firebase';
 import { Language, translations } from '../../lib/locales';
-import { doc, getDoc, updateDoc, onSnapshot, serverTimestamp, writeBatch, setDoc } from 'firebase/firestore';
-import { handleFirestoreError, OperationType } from '../../lib/firebase';
 import { Screen } from '../../types';
 import { useToast } from '../ui/Toast';
+import { generateActivationCode, isValidActivationCode } from '../../lib/activation';
 
 export default function SettingsScreen({ 
   user, 
@@ -43,110 +41,44 @@ export default function SettingsScreen({
 }) {
   const t = translations[lang];
   const { showToast } = useToast();
-  const [premiumCode, setPremiumCode] = useState('');
   const [inputCode, setInputCode] = useState('');
-  const [isActivating, setIsActivating] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
   // Profile Edit State
   const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [editName, setEditName] = useState(user?.displayName || '');
+  const [editName, setEditName] = useState(user?.name || '');
   const [editPhoto, setEditPhoto] = useState(user?.photoURL || '');
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   const [photoPreview, setPhotoPreview] = useState(user?.photoURL || '');
 
-  useEffect(() => {
-    if (!isAdmin) return;
-    
-    const settingsRef = doc(db, 'settings', 'premium');
-    const unsub = onSnapshot(settingsRef, async (docSnap) => {
-      if (docSnap.exists()) {
-        setPremiumCode(docSnap.data().premiumCode);
-      } else {
-        // Initialize if doesn't exist
-        try {
-          await setDoc(settingsRef, {
-            premiumCode: generateNewCode(),
-            updatedAt: serverTimestamp()
-          });
-        } catch (err) {
-          console.error("Failed to initialize premium settings:", err);
-        }
-      }
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'settings/premium');
-    });
+  // Admin Section State
+  const [adminTargetId, setAdminTargetId] = useState('');
+  const [generatedCode, setGeneratedCode] = useState('');
+  const [showAdminAuth, setShowAdminAuth] = useState(false);
+  const [adminKey, setAdminKey] = useState('');
+  const [adminKeyError, setAdminKeyError] = useState(false);
 
-    return unsub;
-  }, [isAdmin]);
-
-  const generateNewCode = () => {
-    return Math.random().toString(36).substring(2, 10).toUpperCase();
-  };
-
-  const refreshCode = async () => {
-    if (!isAdmin) return;
-    try {
-      await updateDoc(doc(db, 'settings', 'premium'), {
-        premiumCode: generateNewCode(),
-        updatedAt: serverTimestamp()
-      });
-    } catch (err) {
-      console.error("Failed to refresh code:", err);
-    }
-  };
-
-  const getPremiumViaWhatsApp = () => {
-    const phone = "0779705897";
-    const text = translations[lang].whatsappMessage;
-    const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
-  };
-
-  const handleActivatePremium = async () => {
-    if (!inputCode || isActivating) return;
-    setIsActivating(true);
+  const handleActivatePremium = () => {
+    if (!inputCode) return;
     setError('');
     
-    try {
-      const settingsRef = doc(db, 'settings', 'premium');
-      const userRef = doc(db, 'users', user.uid);
-      
-      // 1. Get current code
-      const settingsSnap = await getDoc(settingsRef);
-      if (!settingsSnap.exists() || settingsSnap.data().premiumCode !== inputCode.toUpperCase()) {
-        setError(t.invalidCode);
-        setIsActivating(false);
-        return;
-      }
-
-      const batch = writeBatch(db);
-
-      // 2. Update user status
-      batch.update(userRef, {
-        isPremium: true,
-        activationCode: inputCode.toUpperCase(),
-        updatedAt: serverTimestamp()
-      });
-
-      // 3. Cycle the code (single use)
-      batch.update(settingsRef, {
-        premiumCode: generateNewCode(),
-        oldCode: inputCode.toUpperCase(), // For rule verification
-        updatedAt: serverTimestamp()
-      });
-
-      await batch.commit();
+    if (isValidActivationCode(user.deviceId, inputCode)) {
+      localStorage.setItem(`premium_${user.deviceId}`, 'true');
       setSuccess(true);
       setInputCode('');
-      showToast(t.premiumActivatedNotification, 'success');
-    } catch (err) {
-      console.error("Activation failed:", err);
-      handleFirestoreError(err, OperationType.WRITE, 'activation');
-    } finally {
-      setIsActivating(false);
+      showToast(t.premiumActivated, 'success');
+      // Trigger a reload to update app state (optional, or rely on parent state)
+      setTimeout(() => window.location.reload(), 1500);
+    } else {
+      setError(t.invalidCode);
     }
+  };
+
+  const handleGenerateCode = () => {
+    if (!adminTargetId) return;
+    const code = generateActivationCode(adminTargetId);
+    setGeneratedCode(code);
   };
 
   const [notifications, setNotifications] = useState(true);
@@ -159,18 +91,21 @@ export default function SettingsScreen({
     { name: 'Rose', hex: '#f43f5e' },
   ];
 
-  const handleLogout = async () => {
-    await logout();
+  const handleLogout = () => {
+    localStorage.removeItem('reporter_app_user');
     onLogout();
+    // Try to close the app (works in some mobile wrappers)
+    try {
+      (window as any).navigator?.app?.exitApp?.();
+      window.close();
+    } catch (e) {
+      console.log("Exit app failed");
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        showToast(lang === 'ps' ? 'فایل ډیر لوی دی (Max 2MB)' : 'File is too large (Max 2MB)', 'error');
-        return;
-      }
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64String = reader.result as string;
@@ -181,24 +116,16 @@ export default function SettingsScreen({
     }
   };
 
-  const handleUpdateProfile = async () => {
-    if (!editName.trim() || isUpdatingProfile) return;
+  const handleUpdateProfile = () => {
+    if (!editName.trim()) return;
     setIsUpdatingProfile(true);
-    try {
-      const userRef = doc(db, 'users', user.uid);
-      await updateDoc(userRef, {
-        displayName: editName,
-        photoURL: editPhoto,
-        updatedAt: serverTimestamp()
-      });
-      showToast(t.profileUpdated, 'success');
-      setIsEditingProfile(false);
-    } catch (err) {
-      console.error("Profile update error:", err);
-      showToast(lang === 'ps' ? 'غلطي وشوه' : 'Error updating profile', 'error');
-    } finally {
-      setIsUpdatingProfile(false);
-    }
+    const updatedUser = { ...user, name: editName, photoURL: editPhoto };
+    localStorage.setItem('reporter_app_user', JSON.stringify(updatedUser));
+    showToast(t.profileUpdated, 'success');
+    setIsEditingProfile(false);
+    setIsUpdatingProfile(false);
+    // Reload to apply
+    setTimeout(() => window.location.reload(), 500);
   };
 
   const menuGroups = [
@@ -247,8 +174,12 @@ export default function SettingsScreen({
       title: lang === 'ps' ? 'امنیت' : 'Security',
       items: [
         { label: t.policy, icon: Shield, color: 'text-brand', onClick: () => onNavigate('policy') },
-        { label: t.cloudSync, icon: Download, value: 'Auto', color: 'text-cyan-500' },
-        ...(isAdmin ? [{ label: t.notifications + " (Admin)", icon: Bell, color: 'text-purple-500', onClick: () => onNavigate('admin-notifications') }] : []),
+        { 
+          label: t.adminPanel, 
+          icon: Terminal, 
+          color: 'text-red-500',
+          onClick: () => setShowAdminAuth(true)
+        },
       ]
     },
     {
@@ -279,23 +210,6 @@ export default function SettingsScreen({
           onClick: () => window.open('mailto:obaidullahghafari@gmail.com', '_blank')
         },
       ]
-    },
-    {
-      title: lang === 'ps' ? 'ملاتړ' : 'Support',
-      items: [
-        { 
-          label: t.help, 
-          icon: HelpCircle, 
-          color: 'text-gray-400',
-          onClick: () => onNavigate('help')
-        },
-        { 
-          label: t.creator, 
-          icon: User, 
-          value: t.obaidullah,
-          color: 'text-brand',
-        },
-      ]
     }
   ];
 
@@ -303,7 +217,7 @@ export default function SettingsScreen({
     <motion.div 
       initial={{ opacity: 0, scale: 1.1 }}
       animate={{ opacity: 1, scale: 1 }}
-      className={`flex-1 overflow-y-auto px-6 pt-16 pb-32 ${lang === 'ps' ? 'text-right outline-none' : 'text-left'}`}
+      className={`flex-1 min-h-0 overflow-y-auto px-6 pt-16 pb-32 ${lang === 'ps' ? 'text-right outline-none' : 'text-left'}`}
       dir={lang === 'ps' ? 'rtl' : 'ltr'}
       style={{ '--primary-color': primaryColor } as React.CSSProperties}
     >
@@ -317,18 +231,18 @@ export default function SettingsScreen({
       <section className={`glass-card p-6 mb-10 flex items-center gap-4 ${lang === 'ps' ? 'flex-row-reverse' : ''}`}>
         <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 p-1">
           <img 
-            src={user?.photoURL || `https://ui-avatars.com/api/?name=${user?.displayName || 'User'}&background=10b981&color=fff`} 
+            src={user?.photoURL || `https://ui-avatars.com/api/?name=${user?.name || 'User'}&background=10b981&color=fff`} 
             alt="Avatar" 
             className="w-full h-full rounded-[20px] object-cover"
           />
         </div>
         <div className="grow">
-          <h4 className="text-lg font-bold font-display">{user?.displayName || 'User'}</h4>
-          <p className="text-gray-500 text-sm">{user?.email}</p>
+          <h4 className="text-lg font-bold font-display">{user?.name || 'User'}</h4>
+          <p className="text-gray-500 text-xs font-mono">{user?.deviceId}</p>
         </div>
         <button 
           onClick={() => {
-            setEditName(user?.displayName || '');
+            setEditName(user?.name || '');
             setEditPhoto(user?.photoURL || '');
             setPhotoPreview(user?.photoURL || '');
             setIsEditingProfile(true);
@@ -358,22 +272,9 @@ export default function SettingsScreen({
             >
               <div className={`glass-card rounded-t-[40px] bg-[#0c0c0c] p-8 pb-12 ${lang === 'ps' ? 'text-right' : 'text-left'}`} dir={lang === 'ps' ? 'rtl' : 'ltr'}>
                 <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-8" />
-                
-                <div className={`flex items-center justify-between mb-8 ${lang === 'ps' ? 'flex-row-reverse' : ''}`}>
-                  <div>
-                    <h3 className="text-2xl font-bold font-display text-white">{t.editProfile}</h3>
-                    <p className="text-gray-500 text-sm">{t.editProfileSub}</p>
-                  </div>
-                  <button 
-                    onClick={() => setIsEditingProfile(false)}
-                    className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center active:scale-95"
-                  >
-                    <X className="w-5 h-5 text-gray-400" />
-                  </button>
-                </div>
+                <h3 className="text-2xl font-bold font-display text-white mb-8">{t.editProfile}</h3>
 
                 <div className="space-y-6">
-                  {/* Photo Edit */}
                   <div className="flex flex-col items-center gap-4">
                     <div className="relative group">
                       <div className="w-24 h-24 rounded-[32px] bg-white/5 border border-white/10 p-1 overflow-hidden">
@@ -397,34 +298,24 @@ export default function SettingsScreen({
                         onChange={handleFileChange}
                       />
                     </div>
-                    <span className="text-xs text-gray-500 uppercase font-black tracking-widest">{t.profilePicture}</span>
                   </div>
 
-                  {/* Name Edit */}
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-400 px-2">{t.displayName}</label>
-                    <div className="relative">
-                      <input 
-                        type="text" 
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        className="glass-input w-full pl-12"
-                        placeholder="Your Name"
-                      />
-                      <User className={`absolute top-4 w-5 h-5 text-gray-600 ${lang === 'ps' ? 'right-4' : 'left-4'}`} />
-                    </div>
+                    <input 
+                      type="text" 
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="glass-input w-full"
+                      placeholder="Your Name"
+                    />
                   </div>
 
                   <button 
                     onClick={handleUpdateProfile}
-                    disabled={isUpdatingProfile || !editName.trim()}
-                    className="btn-primary w-full py-4 rounded-3xl mt-4 shadow-xl shadow-brand/20 disabled:opacity-50"
+                    className="btn-primary w-full py-4 rounded-3xl mt-4 shadow-xl shadow-brand/20"
                   >
-                    {isUpdatingProfile ? (
-                      <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <Check className="w-5 h-5" />
-                    )}
+                    <Check className="w-5 h-5" />
                     <span>{t.saveChanges}</span>
                   </button>
                 </div>
@@ -434,139 +325,182 @@ export default function SettingsScreen({
         )}
       </AnimatePresence>
 
-      {/* Premium Activation / Status Section */}
+      {/* Admin Auth Modal */}
+      <AnimatePresence>
+        {showAdminAuth && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100]"
+              onClick={() => setShowAdminAuth(false)}
+            />
+            <motion.div 
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              className="fixed bottom-0 left-0 right-0 z-[110] max-w-lg mx-auto"
+            >
+              <div className={`glass-card rounded-t-[40px] bg-[#0c0c0c] p-8 pb-12 ${lang === 'ps' ? 'text-right' : 'text-left'}`} dir={lang === 'ps' ? 'rtl' : 'ltr'}>
+                <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-8" />
+                <h3 className="text-2xl font-bold font-display text-white mb-8">Admin Access</h3>
+
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-400 px-2">Enter Secret Key</label>
+                    <input 
+                      type="password" 
+                      value={adminKey}
+                      onChange={(e) => {
+                        setAdminKey(e.target.value);
+                        setAdminKeyError(false);
+                      }}
+                      className={`glass-input w-full ${adminKeyError ? 'border-red-500' : ''}`}
+                      placeholder="****"
+                    />
+                    {adminKeyError && <p className="text-red-500 text-xs px-2">Invalid Secret Key</p>}
+                  </div>
+
+                  <button 
+                    onClick={() => {
+                      if (adminKey === "6312") {
+                        localStorage.setItem('admin_mode', 'true');
+                        window.location.reload();
+                      } else {
+                        setAdminKeyError(true);
+                      }
+                    }}
+                    className="btn-primary w-full py-4 rounded-3xl mt-4 shadow-xl shadow-brand/20 bg-red-600 border-red-600"
+                  >
+                    <Terminal className="w-5 h-5" />
+                    <span>Verify Admin</span>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Premium Activation Section */}
       <section className="mb-10">
         <div className={`glass-card p-6 overflow-hidden relative transition-all duration-500 ${isPremium ? 'border-brand-soft bg-brand-soft shadow-lg' : 'border-brand/30 bg-brand/5'}`}
              style={isPremium ? { boxShadow: '0 0 30px var(--primary-color-glow-strong)' } : {}}
         >
-          <AnimatePresence>
-            {isPremium && (
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="absolute inset-0 pointer-events-none overflow-hidden"
-              >
-                <div className="absolute top-[-50%] left-[-50%] w-[200%] h-[200%] bg-[radial-gradient(circle,var(--primary-color-glow)_0%,transparent_70%)] animate-pulse" />
-              </motion.div>
-            )}
-          </AnimatePresence>
-          
           <div className={`flex items-center gap-4 mb-6 relative z-10 ${lang === 'ps' ? 'flex-row-reverse' : ''}`}>
-            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${isPremium ? 'bg-brand text-white shadow-lg relative' : 'bg-brand/10 text-brand'}`}
-                 style={isPremium ? { boxShadow: '0 10px 15px -3px var(--primary-color-glow-strong)' } : {}}
-            >
-              <Sparkles className={`w-7 h-7 ${isPremium ? 'animate-spin-slow' : ''}`} />
-              {isPremium && (
-                <motion.div 
-                  layoutId="premium-badge"
-                  className="absolute -top-1 -right-1 w-5 h-5 bg-brand rounded-full border-2 border-background flex items-center justify-center"
-                >
-                  <Check className="w-3 h-3 text-white" />
-                </motion.div>
-              )}
+            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${isPremium ? 'bg-brand text-white shadow-lg relative' : 'bg-brand/10 text-brand'}`}>
+              <Sparkles className="w-7 h-7" />
             </div>
             <div className={lang === 'ps' ? 'text-right' : 'text-left'}>
               <h4 className={`text-xl font-bold font-display ${isPremium ? 'text-brand' : ''}`}>
                 {isPremium ? (lang === 'ps' ? 'پریمیم فعال دی' : 'Premium Active') : t.activatePremium}
               </h4>
-              <p className="text-gray-500 text-xs">
-                {isPremium ? (lang === 'ps' ? 'تاسو ټولو برخو ته بشپړ لاسرسی لرئ' : 'Unlimited access enabled') : t.firstThreeFree}
-              </p>
+              <p className="text-gray-400 text-xs">{t.deviceId}: {user.deviceId}</p>
             </div>
           </div>
 
-          {!isPremium && !success && (
+          {!isPremium && (
             <div className="space-y-4">
+              <div className="flex items-center gap-2 bg-white/5 p-3 rounded-xl border border-white/5">
+                <span className="text-xs font-mono grow">{user.deviceId}</span>
+                <button 
+                  onClick={() => {
+                    navigator.clipboard.writeText(user.deviceId);
+                    showToast(t.copyId, 'success');
+                  }}
+                  className="p-2 bg-white/5 rounded-lg active:scale-95"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+
               <div className="relative">
                 <input 
                   type="text" 
                   value={inputCode}
                   onChange={(e) => setInputCode(e.target.value.toUpperCase())}
-                  placeholder={t.enterPremiumCode}
-                  className={`glass-input w-full pr-12 font-mono tracking-widest ${lang === 'ps' ? 'text-right' : 'text-left'}`}
+                  placeholder={t.activationCode}
+                  className="glass-input w-full pr-12 font-mono tracking-widest"
                 />
                 <Key className={`absolute top-4 w-5 h-5 text-gray-600 ${lang === 'ps' ? 'left-4' : 'right-4'}`} />
               </div>
               
-              {error && (
-                <div className="flex items-center gap-2 text-red-500 text-xs px-2">
-                  <AlertCircle className="w-3 h-3" />
-                  <span>{error}</span>
-                </div>
-              )}
+              {error && <p className="text-red-500 text-xs px-2">{error}</p>}
 
               <button 
                 onClick={handleActivatePremium}
-                disabled={!inputCode || isActivating}
-                className="btn-primary w-full shadow-lg disabled:opacity-50"
-                style={!isActivating && inputCode ? { boxShadow: '0 10px 15px -3px var(--primary-color-glow-strong)' } : {}}
+                disabled={!inputCode}
+                className="btn-primary w-full shadow-lg"
               >
-                {isActivating ? (
-                  <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <Check className="w-5 h-5" />
-                )}
+                <Check className="w-5 h-5" />
                 <span>{t.activatePremium}</span>
-              </button>
-
-              <button 
-                onClick={getPremiumViaWhatsApp}
-                className="btn-glass w-full border-brand-soft text-brand"
-              >
-                <Sparkles className="w-5 h-5" />
-                <span>{t.getCode} (WhatsApp)</span>
               </button>
             </div>
           )}
 
-          {success && (
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="text-center py-4"
-            >
-              <div className="w-12 h-12 rounded-full bg-brand-soft flex items-center justify-center mx-auto mb-3">
-                <Check className="w-6 h-6 text-brand" />
+          {isPremium && (
+            <div className="py-2">
+              <div className="flex items-center gap-2 text-brand font-bold">
+                <CheckCircle className="w-5 h-5" />
+                <span>{t.premiumActivated}</span>
               </div>
-              <p className="text-brand font-bold">{t.premiumSuccess}</p>
-            </motion.div>
-          )}
-
-          {isAdmin && (
-            <div className={`mt-6 pt-6 border-t border-white/10 ${lang === 'ps' ? 'text-right' : 'text-left'}`}>
-              <div className={`flex items-center justify-between mb-3 ${lang === 'ps' ? 'flex-row-reverse' : ''}`}>
-                <span className="text-xs font-black uppercase tracking-widest text-brand">{t.premiumCode} (Admin)</span>
-                <button 
-                  onClick={refreshCode}
-                  className="p-1 hover:text-white text-gray-500 transition-colors"
-                >
-                  <RefreshCw className="w-3 h-3" />
-                </button>
-              </div>
-              <div className="flex items-center gap-3 bg-white/5 rounded-2xl p-4 border border-white/5 group">
-                <code className="grow font-mono text-xl text-white tracking-widest">{premiumCode || '********'}</code>
-                <button 
-                  onClick={() => navigator.clipboard.writeText(premiumCode)}
-                  className="p-2 bg-white/5 rounded-xl text-gray-500 hover:text-white"
-                >
-                  <Copy className="w-4 h-4" />
-                </button>
-              </div>
-              <p className="text-[10px] text-gray-600 mt-2">
-                This code is for single use. It will change automatically.
-              </p>
             </div>
           )}
         </div>
       </section>
 
+      {/* Admin Panel (Hidden) */}
+      {isAdmin && (
+        <section className="mb-10 p-6 glass-card border-red-500/20 bg-red-500/5">
+          <div className={`flex items-center gap-3 mb-6 ${lang === 'ps' ? 'flex-row-reverse' : ''}`}>
+            <Terminal className="w-6 h-6 text-red-500" />
+            <h4 className="text-xl font-bold font-display text-red-500">{t.adminPanel}</h4>
+          </div>
+          <div className="space-y-4">
+            <input 
+              type="text" 
+              placeholder="Target Device ID"
+              value={adminTargetId}
+              onChange={(e) => setAdminTargetId(e.target.value.toUpperCase())}
+              className="glass-input w-full border-red-500/10"
+            />
+            <button 
+              onClick={handleGenerateCode}
+              className="w-full py-4 bg-red-500 text-white rounded-2xl font-bold active:scale-95 transition-transform"
+            >
+              {t.generateCode}
+            </button>
+            {generatedCode && (
+              <div className="p-4 bg-black/40 rounded-xl border border-red-500/20 text-center">
+                <p className="text-xs text-gray-500 mb-1">{t.activationCode}:</p>
+                <code className="text-2xl font-mono text-red-500 tracking-widest">{generatedCode}</code>
+                <button 
+                  onClick={() => navigator.clipboard.writeText(generatedCode)}
+                  className="mt-3 block mx-auto p-2 text-xs text-gray-400 hover:text-white"
+                >
+                  {t.copyId}
+                </button>
+              </div>
+            )}
+            <button 
+               onClick={() => {
+                 localStorage.removeItem('admin_mode');
+                 window.location.reload();
+               }}
+               className="w-full text-xs text-red-400 opacity-50 hover:opacity-100 mt-4"
+            >
+              Exit Admin Mode
+            </button>
+          </div>
+        </section>
+      )}
+
       <div className="space-y-8">
         {menuGroups.map((group, i) => (
           <div key={i} className="space-y-4">
             <h5 className={`text-xs font-black uppercase tracking-[0.2em] text-gray-600 ${lang === 'ps' ? 'pr-2' : 'pl-2'}`}>{group.title}</h5>
-            {group.custom ? (
-              group.custom
-            ) : (
+            {group.custom ? group.custom : (
               <div className="glass-card overflow-hidden">
                 {group.items?.map((item, j) => (
                   <button 
@@ -599,10 +533,26 @@ export default function SettingsScreen({
           <span>{t.logout}</span>
         </button>
       </div>
-
-      <p className="mt-12 text-center text-gray-600 text-[10px] uppercase font-black tracking-widest" dir="ltr">
-        SupportHub Version 2.4.0 (Alpha)
-      </p>
     </motion.div>
+  );
+}
+
+function CheckCircle(props: any) {
+  return (
+    <svg 
+      {...props} 
+      xmlns="http://www.w3.org/2000/svg" 
+      width="24" 
+      height="24" 
+      viewBox="0 0 24 24" 
+      fill="none" 
+      stroke="currentColor" 
+      strokeWidth="2" 
+      strokeLinecap="round" 
+      strokeLinejoin="round"
+    >
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <polyline points="22 4 12 14.01 9 11.01" />
+    </svg>
   );
 }

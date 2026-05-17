@@ -6,8 +6,6 @@ import {
 import { useState, useMemo } from 'react';
 import { Language, translations } from '../../lib/locales';
 import { templates, templateCategories } from '../../lib/templates';
-import { db } from '../../lib/firebase';
-import { doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 
 export default function TemplatesScreen({ 
   user,
@@ -41,27 +39,29 @@ export default function TemplatesScreen({
     });
   }, [activeCategory, searchQuery, showFavoritesOnly, favorites, lang]);
 
-  const toggleFavorite = async (e: React.MouseEvent, templateId: string) => {
+  const toggleFavorite = (e: React.MouseEvent, templateId: string) => {
     e.stopPropagation();
     if (!user) return;
     
-    const userRef = doc(db, 'users', user.uid);
     const isFavorite = favorites.includes(templateId);
-    
-    try {
-      await updateDoc(userRef, {
-        favoriteTemplates: isFavorite ? arrayRemove(templateId) : arrayUnion(templateId)
-      });
-    } catch (err) {
-      console.error("Toggle favorite error:", err);
+    let newFavorites = [];
+    if (isFavorite) {
+      newFavorites = favorites.filter(id => id !== templateId);
+    } else {
+      newFavorites = [...favorites, templateId];
     }
+    
+    const updatedUser = { ...user, favoriteTemplates: newFavorites };
+    localStorage.setItem('reporter_app_user', JSON.stringify(updatedUser));
+    // Reload to apply
+    window.location.reload();
   };
 
   return (
     <motion.div 
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
-      className={`flex-1 overflow-y-auto px-6 pt-16 pb-32 ${lang === 'ps' ? 'text-right' : 'text-left'}`}
+      className={`flex-1 min-h-0 overflow-y-auto px-6 pt-16 pb-32 ${lang === 'ps' ? 'text-right' : 'text-left'}`}
       dir={lang === 'ps' ? 'rtl' : 'ltr'}
     >
       <header className={`flex items-center justify-between mb-8 ${lang === 'ps' ? 'flex-row-reverse' : ''}`}>

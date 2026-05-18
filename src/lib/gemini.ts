@@ -36,6 +36,7 @@ export async function generateReportContent(params: {
 
     if (!response.ok) {
         const error = await response.json();
+        console.error("Gemini API Error details:", error);
         throw new Error(error.error || "AI generation failed");
     }
 

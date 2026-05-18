@@ -29,15 +29,23 @@ async function startServer() {
       });
       
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
+        model: "gemini-flash-latest",
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: config
       });
       
+      if (!response.text) {
+        throw new Error("Empty response from Gemini API");
+      }
+      
       res.json({ text: response.text });
     } catch (error: any) {
-      console.error("AI Generation Error:", error);
-      res.status(500).json({ error: error.message });
+      console.error("AI Generation Error Details:", {
+        message: error.message,
+        stack: error.stack,
+        details: error.details
+      });
+      res.status(500).json({ error: error.message || "An error occurred with the AI service" });
     }
   });
 

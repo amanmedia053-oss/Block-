@@ -34,28 +34,28 @@ async function startServer() {
       });
       
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
+        model: "gemini-flash-latest",
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: config
       });
       
-      if (!response.text) {
-        console.error("Gemini API returned no text. Response object:", JSON.stringify(response));
-        throw new Error("Empty response from Gemini API");
+      if (!response || !response.text) {
+        console.error("Gemini API returned an invalid response:", JSON.stringify(response));
+        throw new Error("The AI service returned an empty or invalid response. Please check your API key permissions.");
       }
       
       console.log("AI Content generated successfully");
       res.json({ text: response.text });
     } catch (error: any) {
-      console.error("Detailed AI Generation Error:", {
-        message: error.message,
-        status: error.status,
-        statusText: error.statusText,
-        details: error.details
-      });
-      res.status(500).json({ 
-        error: error.message || "An error occurred with the AI service",
-        details: error.details 
+      console.error("Detailed AI Generation Error:", error);
+      
+      const status = error.status || 500;
+      const message = error.message || "An error occurred with the AI service";
+      
+      res.status(status).json({ 
+        error: message,
+        details: error.details,
+        suggestion: "Please ensure your Gemini API key is correctly set in the AI Studio Settings > Secrets panel."
       });
     }
   });

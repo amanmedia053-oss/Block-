@@ -2,6 +2,9 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 async function startServer() {
   const app = express();
@@ -19,6 +22,8 @@ async function startServer() {
         return res.status(500).json({ error: "Gemini API key is not configured" });
       }
 
+      console.log("Generating AI content with prompt length:", prompt?.length);
+      
       const ai = new GoogleGenAI({
         apiKey: apiKey,
         httpOptions: {
@@ -29,23 +34,29 @@ async function startServer() {
       });
       
       const response = await ai.models.generateContent({
-        model: "gemini-flash-latest",
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        model: "gemini-3-flash-preview",
+        contents: prompt,
         config: config
       });
       
       if (!response.text) {
+        console.error("Gemini API returned no text. Response object:", JSON.stringify(response));
         throw new Error("Empty response from Gemini API");
       }
       
+      console.log("AI Content generated successfully");
       res.json({ text: response.text });
     } catch (error: any) {
-      console.error("AI Generation Error Details:", {
+      console.error("Detailed AI Generation Error:", {
         message: error.message,
-        stack: error.stack,
+        status: error.status,
+        statusText: error.statusText,
         details: error.details
       });
-      res.status(500).json({ error: error.message || "An error occurred with the AI service" });
+      res.status(500).json({ 
+        error: error.message || "An error occurred with the AI service",
+        details: error.details 
+      });
     }
   });
 

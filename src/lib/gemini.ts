@@ -35,9 +35,26 @@ export async function generateReportContent(params: {
     });
 
     if (!response.ok) {
-        const error = await response.json();
-        console.error("Gemini API Error details:", error);
-        const errorMessage = error.suggestion ? `${error.error}. ${error.suggestion}` : (error.error || "AI generation failed");
+        let errorMessage = `HTTP ${response.status} - ${response.statusText}`;
+        try {
+            const error = await response.json();
+            console.error("Gemini API Error details:", error);
+            errorMessage = error.suggestion ? `${error.error}. ${error.suggestion}` : (error.error || errorMessage);
+        } catch (parseError) {
+            try {
+                const text = await response.text();
+                if (text.includes("<pre>")) {
+                    const match = text.match(/<pre>([\s\S]*?)<\/pre>/);
+                    errorMessage += `: ${match ? match[1].trim() : text.substring(0, 150)}`;
+                } else if (text && text.trim().length > 0) {
+                    // Strip HTML tags if any
+                    const cleanText = text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+                    errorMessage += `: ${cleanText.substring(0, 150)}`;
+                }
+            } catch (textError) {
+                errorMessage += ": Unable to parse server error payload.";
+            }
+        }
         throw new Error(errorMessage);
     }
 

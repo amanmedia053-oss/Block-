@@ -58,10 +58,19 @@ async function startServer() {
     } catch (error: any) {
       console.error("Detailed AI Generation Error:", error);
       
-      const status = error.status || 500;
+      let statusCode = 500;
+      if (typeof error.status === 'number' && error.status >= 100 && error.status < 600) {
+        statusCode = error.status;
+      } else if (typeof error.status === 'string' && !isNaN(parseInt(error.status))) {
+        const parsed = parseInt(error.status);
+        if (parsed >= 100 && parsed < 600) {
+          statusCode = parsed;
+        }
+      }
+      
       const message = error.message || "An error occurred with the AI service";
       
-      res.status(status).json({ 
+      res.status(statusCode).json({ 
         error: message,
         details: error.details,
         suggestion: "Please ensure your Gemini API key is correctly set in the AI Studio Settings > Secrets panel."

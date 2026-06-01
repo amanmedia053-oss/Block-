@@ -120,8 +120,9 @@ export default function CreateReportScreen({
       
       showToast(lang === 'ps' ? 'په محلي ډول خوندي شو' : 'Saved locally');
       onPreview(reportData);
-    } catch (e) {
-      setError('Failed to generate report. Please try again.');
+    } catch (e: any) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(lang === 'ps' ? `د رپوټ په جوړولو کې ستونزه راغله: ${msg}` : `Failed to generate report: ${msg}`);
     } finally {
       setIsGenerating(false);
     }

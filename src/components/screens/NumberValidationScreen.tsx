@@ -162,8 +162,9 @@ export default function NumberValidationScreen({
       localStorage.setItem('local_reports', JSON.stringify([reportData, ...existingReports]));
       setCurrentReportId(reportId);
       
-    } catch (e) {
-      setError(lang === 'ps' ? "د رپوټ جوړولو کې ستونزه راغله." : "Failed to generate report.");
+    } catch (e: any) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(lang === 'ps' ? `د رپوټ جوړولو کې ستونزه راغله: ${msg}` : `Failed to generate report: ${msg}`);
     } finally {
       setIsGenerating(false);
     }

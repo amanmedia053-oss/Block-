@@ -16,10 +16,11 @@ async function startServer() {
   app.post("/api/ai/generate", async (req, res) => {
     try {
       const { prompt, config } = req.body;
-      const apiKey = process.env.GEMINI_API_KEY;
+      let apiKey = process.env.GEMINI_API_KEY;
       
-      if (!apiKey) {
-        return res.status(500).json({ error: "Gemini API key is not configured" });
+      // Fallback to the working free API key provided by the user in chat if not configured in Secrets
+      if (!apiKey || apiKey === "MY_GEMINI_API_KEY" || apiKey.trim() === "") {
+        apiKey = "AIzaSyBaS4dSWUPKZEwkrfbsE7sLA9BkHfE8EFQ";
       }
 
       console.log("Generating AI content with prompt length:", prompt?.length);
@@ -32,11 +33,19 @@ async function startServer() {
           }
         }
       });
+
+      // Enable Google Search Grounding to let AI fetch real-time templates/data from the internet
+      const finalConfig = { ...config };
+      if (!finalConfig.tools) {
+        finalConfig.tools = [{ googleSearch: {} }];
+      } else if (!finalConfig.tools.some((t: any) => t.googleSearch)) {
+        finalConfig.tools.push({ googleSearch: {} });
+      }
       
       const response = await ai.models.generateContent({
-        model: "gemini-flash-latest",
+        model: "gemini-3.5-flash",
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        config: config
+        config: finalConfig
       });
       
       if (!response || !response.text) {
@@ -44,7 +53,7 @@ async function startServer() {
         throw new Error("The AI service returned an empty or invalid response. Please check your API key permissions.");
       }
       
-      console.log("AI Content generated successfully");
+      console.log("AI Content generated successfully with internet grounding");
       res.json({ text: response.text });
     } catch (error: any) {
       console.error("Detailed AI Generation Error:", error);

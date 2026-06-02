@@ -3,11 +3,86 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <title>د مینې ډېوه</title>
+    
+    <!-- Capacitor Early Startup Handler -->
+    <script>
+      // Global error listener to display startup crash info inside mobile WebView if any occurs
+      window.addEventListener('error', function(event) {
+        console.error('Dewa Runtime Cargo Crash:', event.error);
+        const rootLog = document.getElementById('early-crash-debugger');
+        if (rootLog) {
+          rootLog.style.display = 'block';
+          const pre = document.getElementById('early-crash-msg');
+          if (pre) {
+            pre.textContent += '\n[' + new Date().toISOString() + '] ' + event.message + ' (' + event.filename + ':' + event.lineno + ')';
+          }
+        }
+      });
+
+      // Detect Capacitor bridge and log early load status
+      document.addEventListener('DOMContentLoaded', function() {
+        console.log('[Dewa Capacitor Bootstrap] DOM Content Ready');
+        if (window.Capacitor) {
+          console.log('[Dewa Capacitor Bootstrap] Native Bridge is fully active. Platform: ' + window.Capacitor.getPlatform());
+        } else {
+          console.log('[Dewa Capacitor Bootstrap] Running in standard Web Browser environment.');
+        }
+      });
+    </script>
+    
+    <style>
+      #early-crash-debugger {
+        direction: rtl;
+        font-family: system-ui, -apple-system, sans-serif;
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: #0f172a;
+        color: #f1f5f9;
+        z-index: 999999;
+        padding: 24px;
+        text-align: right;
+        overflow-y: auto;
+      }
+      .crash-card {
+        background: #1e293b;
+        border: 1px solid #ef4444;
+        border-radius: 12px;
+        padding: 16px;
+        margin-top: 20px;
+      }
+      .crash-code {
+        background: #020617;
+        padding: 12px;
+        border-radius: 8px;
+        font-family: monospace;
+        font-size: 11px;
+        color: #f87171;
+        direction: ltr;
+        text-align: left;
+        white-space: pre-wrap;
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.6);
+      }
+    </style>
   </head>
-  <body>
+  <body class="bg-slate-950">
+    <!-- Clean, simple DOM root for React mount -->
     <div id="root"></div>
+
+    <!-- Hidden native-level diagnostic fallback canvas -->
+    <div id="early-crash-debugger">
+      <h2 style="font-size: 18px; font-weight: bold; color: #ef4444; margin-bottom: 8px;">د اپلیکیشن تر پايه ناکامي</h2>
+      <p style="font-size: 13px; color: #94a3b8; line-height: 1.6;">بښنه غواړو، مګر د پیلیدو پروګرام په موبایل کې د غېر کتنې تر ستونزو لاندې خراب شو. لاندې بڼه کتلای شئ:</p>
+      
+      <div class="crash-card">
+        <h3 style="font-size: 13px; font-weight: bold; margin-bottom: 6px;">د خطا کوډ او معلومات (Diagnostics):</h3>
+        <pre id="early-crash-msg" class="crash-code">Initialization Failure Diagnostics:</pre>
+      </div>
+      
+      <p style="font-size: 11px; color: #64748b; margin-top: 15px; text-align: center;">د مینې ډېوه ملاتړ ګروپ</p>
+    </div>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

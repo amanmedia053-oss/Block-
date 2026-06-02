@@ -1,12 +1,6 @@
 {
-  "name": "SupportHub",
-  "description": "A premium, modern report management application with AI-powered features, glassmorphism design, and real-time synchronization.",
+  "name": "پښتو شعرونه",
+  "description": "د پښتو ژبې د خوږو شعرونو، غزلونو او کيسو ښکلی کاريال (Pashto Poetry app)",
   "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API",
-    "AI Report Generation",
-    "Cloud Synchronization",
-    "Multiple Template Support",
-    "Data Export (PDF/JSON/CSV)"
-  ]
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
